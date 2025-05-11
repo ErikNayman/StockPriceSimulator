@@ -9,13 +9,13 @@
     :root{--bg:#f4f6f9;--card:#fff;--pri:#2b7cff;--b:#ddd;--mut:#555}
     *{box-sizing:border-box}
     body{margin:0;padding:2rem;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#222}
-    .wrap{max-width:720px;margin:auto;background:var(--card);padding:2rem 2.2rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
-    h1{font-size:1.5rem;margin-bottom:1.2rem}
+    .wrap{max-width:760px;margin:auto;background:var(--card);padding:2rem 2.2rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
+    h1{font-size:1.55rem;margin-bottom:1.2rem}
     .field{display:flex;flex-direction:column;margin-bottom:.9rem}
     .field label{font-weight:600;margin-bottom:.25rem}
     .field input{padding:7px;border:1px solid var(--b);border-radius:4px;font-size:.95rem}
     .hint{font-size:.8rem;color:var(--mut);margin-top:.25rem}
-    button{display:block;width:100%;padding:11px;background:var(--pri);border:none;border-radius:6px;font-weight:700;font-size:1rem;color:#fff;cursor:pointer;margin:1.2rem 0}
+    button{display:block;width:100%;padding:11px;background:var(--pri);border:none;border-radius:6px;font-weight:700;font-size:1rem;color:#fff;cursor:pointer;margin:1.3rem 0}
     button:hover{opacity:.93}
     table{margin-top:1.2rem;border-collapse:collapse;width:100%}
     th,td{border:1px solid var(--b);padding:6px;text-align:center;font-size:.85rem}
@@ -29,11 +29,13 @@
   <!-- INPUTS -->
   <div class="field"><label for="pNow">Share price, $</label><input id="pNow" type="number" value="100" step="0.1"><span class="hint">Market price today</span></div>
   <div class="field"><label for="rev">Revenue (last FY), B$</label><input id="rev" type="number" value="50" step="0.1"></div>
-  <div class="field"><label for="g0">Initial YoY growth %, last FY</label><input id="g0" type="number" value="20" step="0.1"><span class="hint">Used to calibrate early‑stage slope</span></div>
+  <div class="field"><label for="g0">Initial YoY growth %, last FY</label><input id="g0" type="number" value="20" step="0.1"></div>
   <div class="field"><label for="tam">TAM ceiling, B$</label><input id="tam" type="number" value="300" step="1"></div>
   <div class="field"><label for="m0">Net margin %, current</label><input id="m0" type="number" value="-5" step="0.1"></div>
-  <div class="field"><label for="mPk">Peak margin % (steady‑state)</label><input id="mPk" type="number" value="20" step="0.5"></div>
-  <div class="field"><label for="pay">Payout %</label><input id="pay" type="number" value="40" step="1"><span class="hint">Dividends / NI</span></div>
+  <div class="field"><label for="mPk">Peak margin %, steady‑state</label><input id="mPk" type="number" value="20" step="0.5"></div>
+  <div class="field"><label for="tMid">Margin S‑curve midpoint, year</label><input id="tMid" type="number" value="5" step="0.1"><span class="hint">Year when margin≈(m0+mPk)/2</span></div>
+  <div class="field"><label for="kLog">Margin S‑curve steepness k</label><input id="kLog" type="number" value="0.5" step="0.05"><span class="hint">Higher k → sharper transition</span></div>
+  <div class="field"><label for="pay">Payout % (div/NI)</label><input id="pay" type="number" value="40" step="1"></div>
   <div class="field"><label for="sh">Shares out, B</label><input id="sh" type="number" value="1" step="0.01"></div>
   <div class="field"><label for="peT">Terminal P/E</label><input id="peT" type="number" value="12" step="1"></div>
 
@@ -46,84 +48,53 @@
 </div>
 
 <script>
-// ---------- helpers ----------
+// === util ===
 const $ = id=>document.getElementById(id);
 const val = id=>+($(id)?.value||0);
+const logistic = (t,t0,k)=>1/(1+Math.exp(-k*(t-t0)));
 
-// revenue trajectory via logistic S‑curve (captures acceleration then slowdown)
+// revenue S‑curve (logistic to TAM)
 function revenuePath(years){
   const R0=val('rev'), TAM=val('tam'), g0=val('g0')/100;
   if(R0<=0||TAM<=R0){return Array(years).fill(R0);} // fallback
-  const lambda = g0 * TAM / (TAM - R0); // calibrate slope so that first‑year growth ~ g0
+  const lambda = g0 * TAM / (TAM - R0);
   const A = (TAM - R0)/R0;
-  const rev=[];
-  for(let t=1;t<=years;t++){
-    const Rt = TAM / (1 + A*Math.exp(-lambda*t));
-    rev.push(Rt);
-  }
-  return rev;
-}
-
-function marginPath(years){
-  const m0=val('m0')/100, mPk=val('mPk')/100;
-  const k=0.5, tMid=5;
   const arr=[];
-  for(let t=1;t<=years;t++){
-    const m = m0 + (mPk-m0)/(1+Math.exp(-k*(t-tMid))); // logistic lift of margins
-    arr.push(m);
-  }
+  for(let t=1;t<=years;t++) arr.push( TAM / (1 + A*Math.exp(-lambda*t)) );
   return arr;
 }
-
-function epsSeries(scene,years){
-  const rev = revenuePath(years+5); // generate longer to reuse
-  const margin = marginPath(years+5);
-  const adj={P:0.6,B:1,O:1.3}[scene];
-  const eps=[];
-  const sh=val('sh');
-  for(let i=0;i<years;i++){
-    const r = rev[i]*adj; // scenario scaling
-    eps.push(r*margin[i]/sh);
-  }
+// margin logistic curve with user k and tMid
+function marginPath(years){
+  const m0=val('m0')/100, mPk=val('mPk')/100, k=val('kLog'), tMid=val('tMid');
+  const arr=[];
+  for(let t=1;t<=years;t++) arr.push( m0 + (mPk-m0)/(1+Math.exp(-k*(t-tMid))) );
+  return arr;
+}
+function epsSeries(sc,yrs){
+  const rev=revenuePath(yrs+5), margin=marginPath(yrs+5); const adj={P:0.6,B:1,O:1.3}[sc];
+  const sh=val('sh'); const eps=[];
+  for(let i=0;i<yrs;i++) eps.push( rev[i]*adj*margin[i]/sh );
   return eps;
 }
-
-function buildCF(price,eps,payout,peT){
-  const cf=[-price]; eps.forEach(e=>cf.push(e*payout)); cf[cf.length-1]+=eps.at(-1)*peT; return cf;
-}
-
-function IRR(cf){
-  let r=0.1;
-  for(let i=0;i<100;i++){
-    let f=0,df=0;
-    cf.forEach((c,t)=>{const d=(1+r)**t;f+=c/d;if(t>0)df+=-t*c/(d*(1+r));});
-    if(Math.abs(df)<1e-8) return null;
-    const rN=r-f/df;
-    if(!Number.isFinite(rN)) return null;
-    if(Math.abs(rN-r)<1e-6) return rN;
-    r=rN;
-  }
-  return null;
-}
-
+const cash=(P,eps,pay,pe)=>{const cf=[-P];eps.forEach(e=>cf.push(e*pay));cf[cf.length-1]+=eps.at(-1)*pe;return cf};
+function IRR(cf){let r=0.1;for(let i=0;i<100;i++){let f=0,df=0;cf.forEach((c,t)=>{const d=(1+r)**t;f+=c/d;if(t>0)df+=-t*c/(d*(1+r));});if(Math.abs(df)<1e-8) return null;const rN=r-f/df;if(!isFinite(rN))return null;if(Math.abs(rN-r)<1e-6) return rN;r=rN;}return null;}
 function simulate(){
-  const price=val('pNow'); if(!price){alert('Please enter share price');return;}
-  const payout=val('pay')/100, peT=val('peT');
-  const tbl=$('tbl'), tbody=tbl.querySelector('tbody'); tbody.innerHTML='';
-  const SC=['P','B','O'], horizons=[7,10,15], bar=[];
+  const price=val('pNow'); if(!price){alert('Enter share price');return;}
+  const pay=val('pay')/100, peT=val('peT');
+  const tbody=document.querySelector('#tbl tbody'); tbody.innerHTML='';
+  const SC=['P','B','O'], H=[7,10,15], bar=[];
   SC.forEach(s=>{
     const eps10=epsSeries(s,10);
     const epsMap={7:eps10.slice(0,7),10:eps10,15:[...eps10,...epsSeries(s,5)]};
-    const irr={};
-    horizons.forEach(h=>{const r=IRR(buildCF(price,epsMap[h],payout,peT));irr[h]=r? (r*100).toFixed(2):'n/a';});
-    const futPrice=(eps10.at(-1)*peT).toFixed(2);
-    tbody.insertAdjacentHTML('beforeend',`<tr><td>${s}</td><td>${eps10.at(-1).toFixed(2)}</td><td>${futPrice}</td><td>${irr[7]}</td><td>${irr[10]}</td><td>${irr[15]}</td></tr>`);
+    const irr={}; H.forEach(h=>{const r=IRR(cash(price,epsMap[h],pay,peT)); irr[h]=r? (r*100).toFixed(2):'n/a';});
+    tbody.insertAdjacentHTML('beforeend',`<tr><td>${s}</td><td>${eps10.at(-1).toFixed(2)}</td><td>${(eps10.at(-1)*peT).toFixed(2)}</td><td>${irr[7]}</td><td>${irr[10]}</td><td>${irr[15]}</td></tr>`);
     bar.push(isNaN(+irr[10])?0:+irr[10]);
   });
-  tbl.style.display='table';
+  document.getElementById('tbl').style.display='table';
   Plotly.newPlot('bar',[{x:SC,y:bar,type:'bar'}]);
+
   const peArr=Array.from({length:13},(_,i)=>8+i);
-  const irrPE=peArr.map(pe=>{const r=IRR(buildCF(price,epsSeries('B',10),payout,pe));return r?r*100:0;});
+  const irrPE=peArr.map(pe=>{const r=IRR(cash(price,epsSeries('B',10),pay,pe));return r?r*100:0;});
   Plotly.newPlot('line',[{x:peArr,y:irrPE,type:'scatter',mode:'lines+markers'}]);
 }
 
