@@ -3,109 +3,117 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AAPL Sensitivity Simulator</title>
+  <title>DCF + XIRR Simulator (Growth / Value)</title>
   <script src="https://cdn.plot.ly/plotly-2.20.0.min.js"></script>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:2rem;background:#f4f6f9;color:#222}
-    h1{margin:0 0 1rem;font-size:1.5rem}
-    .box{max-width:960px;margin:auto;background:#fff;padding:1.6rem 2rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
-    .grid{display:grid;grid-template-columns:180px 1fr;gap:.8rem;margin-bottom:1rem}
-    label{font-weight:600;margin-top:.3rem}
-    input[type=number]{width:100%;padding:6px;border:1px solid #ccc;border-radius:4px}
-    button{padding:9px 18px;background:#2b7cff;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:1rem;margin-top:.5rem}
+    :root{--bg:#f4f6f9;--card:#fff;--pri:#2b7cff;--b:#ddd;--mut:#555}
+    *{box-sizing:border-box}
+    body{margin:0;padding:2rem;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#222}
+    .container{max-width:1100px;margin:auto;background:var(--card);padding:2rem 2.4rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
+    h1{font-size:1.5rem;margin-bottom:1rem}
+    .grid{display:grid;grid-template-columns:250px 1fr 90px;gap:.85rem;margin-bottom:.8rem}
+    label{font-weight:600;margin-top:.32rem}
+    input{width:100%;padding:6px 8px;border:1px solid var(--b);border-radius:4px}
+    small{grid-column:2/4;color:var(--mut);font-size:.78rem;margin:-.3rem 0 .35rem}
+    button{padding:10px 22px;background:var(--pri);color:#fff;border:none;border-radius:6px;font-weight:700;font-size:1rem;cursor:pointer;margin-top:.6rem}
     button:hover{opacity:.93}
-    #plot{height:520px;width:100%;}
-    .note{font-size:.85rem;color:#555;margin-top:1rem}
+    table{margin-top:1.1rem;border-collapse:collapse;width:100%}
+    th,td{border:1px solid var(--b);padding:6px;text-align:center;font-size:.85rem}
+    .plot{height:420px;width:100%;margin-top:1.25rem}
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>AAPL Price Sensitivity Simulator</h1>
+  <div class="container">
+    <h1>DCF & XIRR Calculator (P/B/O scenarios + horizon sensitivity)</h1>
 
     <div class="grid">
-      <label>iPhone ASP range (%)</label>
-      <input id="aspRange" type="number" value="15" step="1" title="Max positive/negative change, e.g. ±15%" />
-      <label>Services growth range (%)</label>
-      <input id="srvRange" type="number" value="20" step="1" title="Max positive/negative change, e.g. ±20%" />
-      <label>Elasticity (volume vs ASP)</label>
-      <input id="elas" type="number" value="1.3" step="0.1" title="|dQ/Q| / |dP/P| for iPhone" />
-      <label>Margin Δ per 1% ASP</label>
-      <input id="mSens" type="number" value="0.1" step="0.05" title="ppt change in net‑margin per +1% ASP" />
-      <label>PE Δ per 1% Services</label>
-      <input id="peSens" type="number" value="0.5" step="0.1" title="% change in P/E per +1% Services growth" />
+      <label>Current share price ($)</label><input id="priceNow" type="number" value="100" step="0.1"><small>Market price today</small>
+      <label>Current revenue (B$)</label><input id="rev" type="number" value="50" step="1"><small>Last FY total revenue</small>
+      <label>YoY revenue growth % (last)</label><input id="g0" type="number" value="20" step="0.1"><small>Trailing growth</small>
+      <label>TAM ceiling (B$)</label><input id="tam" type="number" value="300" step="10"><small>Total addressable market</small>
+      <label>Current net margin %</label><input id="m0" type="number" value="-5" step="0.1"><small>Net income ÷ revenue</small>
+      <label>Peak net margin %</label><input id="mPeak" type="number" value="20" step="0.5"><small>Sustainable peak</small>
+      <label>Dividend payout %</label><input id="payout" type="number" value="40" step="1"><small>% of NI paid as dividend</small>
+      <label>Shares outstanding (B)</label><input id="shares" type="number" value="1" step="0.01"><small>Diluted shares</small>
+      <label>Discount rate (WACC %)</label><input id="wacc" type="number" value="9" step="0.1"><small>Required return</small>
+      <label>Terminal P/E (value phase)</label><input id="peTerm" type="number" value="12" step="1"><small>Applied at horizon</small>
     </div>
     <button id="run">Run simulation</button>
-    <div id="plot"></div>
-    <p class="note">Heat‑map shows modeled share‑price (USD). X – Services growth, Y – ASP shift. Assumes FY‑23 baseline, fixed other segments.</p>
+
+    <table id="tblScen" style="display:none"><thead><tr><th>Scenario</th><th>EPS<sub>n</sub></th><th>Price<sub>future</sub></th><th>XIRR (7y)</th><th>XIRR (10y)</th><th>XIRR (15y)</th></tr></thead><tbody></tbody></table>
+    <div id="chartScenario" class="plot"></div>
+    <div id="chartPE" class="plot"></div>
+    <small>Bottom chart — IRR vs Terminal P/E for Base scenario, 10‑year horizon.</small>
   </div>
 
-<script>
-// ---------- baseline FY‑23 numbers (simplified) ----------
-const BASE = {
-  revenue:{iPhone:169.65,Mac:29.36,iPad:28.30,Wear:39.84,Services:85.20}, // B$
-  netIncome:96.99, // B$
-  shares:15.813,   // B
-  pe:28.0,
-  ASP:950         // $ baseline iPhone ASP
-};
+  <script>
+    // ---------- helpers ----------
+    const $ = id => document.getElementById(id);
+    const qs = sel => document.querySelector(sel);
+    const logistic = (t,t0,k)=>1/(1+Math.exp(-k*(t-t0)));
 
-// helper to compute matrix & plot
-function calcAndPlot(){
-  const rASP = parseFloat(document.getElementById('aspRange').value)||15;
-  const rSrv = parseFloat(document.getElementById('srvRange').value)||20;
-  const elasticity = parseFloat(document.getElementById('elas').value)||1.3;
-  const mSens = parseFloat(document.getElementById('mSens').value)||0.1;
-  const peSens = parseFloat(document.getElementById('peSens').value)||0.5;
+    function buildEPS(sc,h){
+      const R0=+$('#rev').value,g0=+$('#g0').value/100,TAM=+$('#tam').value,
+            m0=+$('#m0').value/100,mPk=+$('#mPeak').value/100,sh=+$('#shares').value;
+      const adj={P:0.6,B:1,O:1.3}[sc];
+      const gPk=g0*adj,tPk=5*adj,k=0.4/adj,mShift=(mPk-m0)*adj;
+      let R=R0,eps=[];
+      for(let t=1;t<=h;t++){
+        const g=gPk*(1-logistic(t,tPk,k));
+        R=Math.min(R*(1+g),TAM);
+        const m=m0+mShift*logistic(t,tPk,k);
+        eps.push((R*m)/sh);
+      }
+      return eps;
+    }
 
-  const aspSteps = 13; // -range..+range
-  const srvSteps = 13;
-  const aspVec = [...Array(aspSteps)].map((_,i)=>-rASP + i*(2*rASP)/(aspSteps-1));
-  const srvVec = [...Array(srvSteps)].map((_,i)=>-rSrv + i*(2*rSrv)/(srvSteps-1));
+    const cashFlow=(price0,epsArr,payout,pe)=>{
+      const cf=[-price0];
+      epsArr.forEach(e=>cf.push(e*payout));
+      cf[cf.length-1]+=epsArr.at(-1)*pe;
+      return cf;
+    };
 
-  const priceGrid = aspVec.map(()=>Array(srvSteps).fill(0));
+    function IRR(cf,guess=0.1){
+      let r=guess;
+      for(let i=0;i<100;i++){
+        let f=0,df=0;
+        cf.forEach((c,t)=>{ const pv=Math.pow(1+r,t); f+=c/pv; if(t>0) df+=-t*c/Math.pow(1+r,t+1);});
+        const rNew=r-f/df;
+        if(Math.abs(rNew-r)<1e-6) return rNew;
+        r=rNew;
+      }
+      return NaN;
+    }
 
-  const {revenue, netIncome, shares, pe, ASP} = BASE;
-  const iphoneUnits = revenue.iPhone*1e9 / ASP; // baseline units
-  const revOther = revenue.Mac + revenue.iPad + revenue.Wear;
-  const margin0 = netIncome / (Object.values(revenue).reduce((a,b)=>a+b,0));
+    document.addEventListener('DOMContentLoaded',()=>{
+      const runBtn=$('#run');
+      if(!runBtn) return; // safety guard
+      runBtn.addEventListener('click',()=>{
+        const priceNow=+$('#priceNow').value,payout=+$('#payout').value/100,peT=+$('#peTerm').value;
+        const scenarios=['P','B','O'], horizons=[7,10,15];
 
-  aspVec.forEach((aspPct, yi)=>{
-    srvVec.forEach((srvPct, xi)=>{
-      const aspNew = ASP*(1+aspPct/100);
-      const vol = iphoneUnits * Math.max(0, 1 - elasticity*aspPct/100);
-      const revIphone = aspNew*vol/1e9;
-      const revServices = revenue.Services*(1+srvPct/100);
-      const revTotal = revIphone + revOther + revServices;
-      const margin = Math.max(0.05, margin0 + mSens*(aspPct/100));
-      const net = revTotal*margin;
-      const eps = (net*1e9)/(shares*1e9);
-      const peNew = Math.max(5, pe*(1+peSens*(srvPct/100)));
-      const price = eps*peNew;
-      priceGrid[yi][xi] = price.toFixed(0);
+        const tbody=qs('#tblScen tbody'); if(tbody) tbody.innerHTML='';
+        const irrBar=[];
+
+        scenarios.forEach(sc=>{
+          const eps10=buildEPS(sc,10);
+          const epsMap={7:eps10.slice(0,7),10:eps10,15:[...eps10,...buildEPS(sc,5)]};
+          const irr={};
+          horizons.forEach(h=>irr[h]=IRR(cashFlow(priceNow,epsMap[h],payout,peT))*100);
+          const priceF=eps10.at(-1)*peT;
+          if(tbody) tbody.insertAdjacentHTML('beforeend',`<tr><td>${sc}</td><td>${eps10.at(-1).toFixed(2)}</td><td>${priceF.toFixed(2)}</td><td>${irr[7].toFixed(2)}%</td><td>${irr[10].toFixed(2)}%</td><td>${irr[15].toFixed(2)}%</td></tr>`);
+          irrBar.push(irr[10]);
+        });
+        const tbl=$('#tblScen'); if(tbl) tbl.style.display='table';
+
+        Plotly.newPlot('chartScenario',[{x:scenarios,y:irrBar,type:'bar',marker:{color:['#ff6961','#f0ad4e','#5cb85c']}}],{title:'IRR (10‑year horizon)',yaxis:{title:'IRR %'},margin:{t:40}});
+
+        const peRange=Array.from({length:13},(_,i)=>8+i);
+        const irrPE=peRange.map(pe=>IRR(cashFlow(priceNow,buildEPS('B',10),payout,pe))*100);
+        Plotly.newPlot('chartPE',[{x:peRange,y:irrPE,type:'scatter',mode:'lines+markers'}],{title:'IRR vs Terminal P/E (Base, 10y)',xaxis:{title:'Terminal P/E'},yaxis:{title:'IRR %'},margin:{t:40}});
+      });
     });
-  });
-
-  // Plotly heat‑map
-  const data=[{
-    z:priceGrid,
-    x:srvVec,
-    y:aspVec,
-    type:'heatmap',
-    colorscale:'Viridis',
-    colorbar:{title:'$'}
-  }];
-  const layout={
-    xaxis:{title:'Services growth %'},
-    yaxis:{title:'iPhone ASP change %'},
-    title:'AAPL price sensitivity surface',
-    margin:{t:40}
-  };
-  Plotly.newPlot('plot',data,layout,{responsive:true});
-}
-
-document.getElementById('run').onclick=calcAndPlot;
-// initial plot
-calcAndPlot();
-</script>
+  </script>
 </body>
 </html>
