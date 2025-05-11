@@ -83,7 +83,7 @@ function simulate(){
   const irrPE=peList.map(pe=>{const v=IRR(cashFlows(price,epsPath('B',10),pay,pe)); return v? v*100 : 0; });
   Plotly.newPlot('line',[{x:peList,y:irrPE,type:'scatter',mode:'lines+markers'}]);
 }
-window.onload=()=>{$('#run').onclick=simulate;};
+window.onload=()=>{$('run').onclick=simulate;};
 </script>
 </body>
 </html>
