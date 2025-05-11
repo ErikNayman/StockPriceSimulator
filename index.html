@@ -75,15 +75,19 @@
     };
 
     function IRR(cf,guess=0.1){
+      // Newton–Raphson root finder on NPV(cf,r)=0 ; returns decimal IRR or null
       let r=guess;
+      if(cf.filter(x=>x!==0).length<=1) return null; // no meaningful flow
       for(let i=0;i<100;i++){
         let f=0,df=0;
-        cf.forEach((c,t)=>{ const pv=Math.pow(1+r,t); f+=c/pv; if(t>0) df+=-t*c/Math.pow(1+r,t+1);});
+        cf.forEach((c,t)=>{const pv=Math.pow(1+r,t);f+=c/pv;if(t>0)df+=-t*c/Math.pow(1+r,t+1);});
+        if(Math.abs(df)<1e-9) break; // avoid div/0
         const rNew=r-f/df;
+        if(!isFinite(rNew)) return null;
         if(Math.abs(rNew-r)<1e-6) return rNew;
         r=rNew;
       }
-      return NaN;
+      return null;
     }
 
     document.addEventListener('DOMContentLoaded',()=>{
@@ -103,7 +107,7 @@
           horizons.forEach(h=>irr[h]=IRR(cashFlow(priceNow,epsMap[h],payout,peT))*100);
           const priceF=eps10.at(-1)*peT;
           if(tbody) tbody.insertAdjacentHTML('beforeend',`<tr><td>${sc}</td><td>${eps10.at(-1).toFixed(2)}</td><td>${priceF.toFixed(2)}</td><td>${irr[7].toFixed(2)}%</td><td>${irr[10].toFixed(2)}%</td><td>${irr[15].toFixed(2)}%</td></tr>`);
-          irrBar.push(irr[10]);
+          irrBar.push(isFinite(irr[10])?irr[10]:0);
         });
         const tbl=$('#tblScen'); if(tbl) tbl.style.display='table';
 
