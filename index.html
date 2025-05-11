@@ -3,121 +3,87 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DCF + XIRR Simulator (Growth / Value)</title>
+  <title>DCF + XIRR Simulator (P/B/O)</title>
   <script src="https://cdn.plot.ly/plotly-2.20.0.min.js"></script>
   <style>
     :root{--bg:#f4f6f9;--card:#fff;--pri:#2b7cff;--b:#ddd;--mut:#555}
     *{box-sizing:border-box}
     body{margin:0;padding:2rem;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#222}
-    .container{max-width:1100px;margin:auto;background:var(--card);padding:2rem 2.4rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
+    .wrap{max-width:1100px;margin:auto;background:var(--card);padding:2rem 2.4rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
     h1{font-size:1.5rem;margin-bottom:1rem}
-    .grid{display:grid;grid-template-columns:250px 1fr 90px;gap:.85rem;margin-bottom:.8rem}
+    .grid{display:grid;grid-template-columns:240px 1fr 90px;gap:.9rem;margin-bottom:1rem}
     label{font-weight:600;margin-top:.32rem}
-    input{width:100%;padding:6px 8px;border:1px solid var(--b);border-radius:4px}
+    input{width:100%;padding:6px;border:1px solid var(--b);border-radius:4px}
     small{grid-column:2/4;color:var(--mut);font-size:.78rem;margin:-.3rem 0 .35rem}
     button{padding:10px 22px;background:var(--pri);color:#fff;border:none;border-radius:6px;font-weight:700;font-size:1rem;cursor:pointer;margin-top:.6rem}
     button:hover{opacity:.93}
-    table{margin-top:1.1rem;border-collapse:collapse;width:100%}
+    table{margin-top:1rem;border-collapse:collapse;width:100%}
     th,td{border:1px solid var(--b);padding:6px;text-align:center;font-size:.85rem}
-    .plot{height:420px;width:100%;margin-top:1.25rem}
+    .plot{height:420px;width:100%;margin-top:1.3rem}
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>DCF & XIRR Calculator (P/B/O scenarios + horizon sensitivity)</h1>
-
-    <div class="grid">
-      <label>Current share price ($)</label><input id="priceNow" type="number" value="100" step="0.1"><small>Market price today</small>
-      <label>Current revenue (B$)</label><input id="rev" type="number" value="50" step="1"><small>Last FY total revenue</small>
-      <label>YoY revenue growth % (last)</label><input id="g0" type="number" value="20" step="0.1"><small>Trailing growth</small>
-      <label>TAM ceiling (B$)</label><input id="tam" type="number" value="300" step="10"><small>Total addressable market</small>
-      <label>Current net margin %</label><input id="m0" type="number" value="-5" step="0.1"><small>Net income ÷ revenue</small>
-      <label>Peak net margin %</label><input id="mPeak" type="number" value="20" step="0.5"><small>Sustainable peak</small>
-      <label>Dividend payout %</label><input id="payout" type="number" value="40" step="1"><small>% of NI paid as dividend</small>
-      <label>Shares outstanding (B)</label><input id="shares" type="number" value="1" step="0.01"><small>Diluted shares</small>
-      <label>Discount rate (WACC %)</label><input id="wacc" type="number" value="9" step="0.1"><small>Required return</small>
-      <label>Terminal P/E (value phase)</label><input id="peTerm" type="number" value="12" step="1"><small>Applied at horizon</small>
-    </div>
-    <button id="run">Run simulation</button>
-
-    <table id="tblScen" style="display:none"><thead><tr><th>Scenario</th><th>EPS<sub>n</sub></th><th>Price<sub>future</sub></th><th>XIRR (7y)</th><th>XIRR (10y)</th><th>XIRR (15y)</th></tr></thead><tbody></tbody></table>
-    <div id="chartScenario" class="plot"></div>
-    <div id="chartPE" class="plot"></div>
-    <small>Bottom chart — IRR vs Terminal P/E for Base scenario, 10‑year horizon.</small>
+<div class="wrap">
+  <h1>DCF & XIRR — 3 Scenarios + PE Sensitivity</h1>
+  <div class="grid">
+    <label>Share price, $</label><input id="pNow" type="number" value="100" step="0.1"><small>Market close today</small>
+    <label>Revenue, B$</label><input id="rev" type="number" value="50" step="1">
+    <label>YoY growth %</label><input id="g0" type="number" value="20" step="0.1">
+    <label>TAM, B$</label><input id="tam" type="number" value="300" step="10">
+    <label>Net margin %</label><input id="m0" type="number" value="-5" step="0.1">
+    <label>Peak margin %</label><input id="mPk" type="number" value="20" step="0.5">
+    <label>Payout %</label><input id="pay" type="number" value="40" step="1"><small>Dividends / NI</small>
+    <label>Shares, B</label><input id="sh" type="number" value="1" step="0.01">
+    <label>Terminal P/E</label><input id="peT" type="number" value="12" step="1">
   </div>
+  <button id="run">Run simulation</button>
 
-  <script>
-    // ---------- helpers ----------
-    const $ = id => document.getElementById(id);
-    const qs = sel => document.querySelector(sel);
-    const logistic = (t,t0,k)=>1/(1+Math.exp(-k*(t-t0)));
+  <table id="tbl" style="display:none"><thead><tr><th>Scenario</th><th>EPS<sub>n</sub></th><th>Future Price</th><th>XIRR 7y</th><th>XIRR 10y</th><th>XIRR 15y</th></tr></thead><tbody></tbody></table>
+  <div id="bar" class="plot"></div>
+  <div id="line" class="plot"></div>
+</div>
 
-    function buildEPS(sc,h){
-      const R0=+$('#rev').value,g0=+$('#g0').value/100,TAM=+$('#tam').value,
-            m0=+$('#m0').value/100,mPk=+$('#mPeak').value/100,sh=+$('#shares').value;
-      const adj={P:0.6,B:1,O:1.3}[sc];
-      const gPk=g0*adj,tPk=5*adj,k=0.4/adj,mShift=(mPk-m0)*adj;
-      let R=R0,eps=[];
-      for(let t=1;t<=h;t++){
-        const g=gPk*(1-logistic(t,tPk,k));
-        R=Math.min(R*(1+g),TAM);
-        const m=m0+mShift*logistic(t,tPk,k);
-        eps.push((R*m)/sh);
-      }
-      return eps;
-    }
-
-    const cashFlow=(price0,epsArr,payout,pe)=>{
-      const cf=[-price0];
-      epsArr.forEach(e=>cf.push(e*payout));
-      cf[cf.length-1]+=epsArr.at(-1)*pe;
-      return cf;
-    };
-
-    function IRR(cf,guess=0.1){
-      // Newton–Raphson root finder on NPV(cf,r)=0 ; returns decimal IRR or null
-      let r=guess;
-      if(cf.filter(x=>x!==0).length<=1) return null; // no meaningful flow
-      for(let i=0;i<100;i++){
-        let f=0,df=0;
-        cf.forEach((c,t)=>{const pv=Math.pow(1+r,t);f+=c/pv;if(t>0)df+=-t*c/Math.pow(1+r,t+1);});
-        if(Math.abs(df)<1e-9) break; // avoid div/0
-        const rNew=r-f/df;
-        if(!isFinite(rNew)) return null;
-        if(Math.abs(rNew-r)<1e-6) return rNew;
-        r=rNew;
-      }
-      return null;
-    }
-
-    document.addEventListener('DOMContentLoaded',()=>{
-      const runBtn=$('#run');
-      if(!runBtn) return; // safety guard
-      runBtn.addEventListener('click',()=>{
-        const priceNow=+$('#priceNow').value,payout=+$('#payout').value/100,peT=+$('#peTerm').value;
-        const scenarios=['P','B','O'], horizons=[7,10,15];
-
-        const tbody=qs('#tblScen tbody'); if(tbody) tbody.innerHTML='';
-        const irrBar=[];
-
-        scenarios.forEach(sc=>{
-          const eps10=buildEPS(sc,10);
-          const epsMap={7:eps10.slice(0,7),10:eps10,15:[...eps10,...buildEPS(sc,5)]};
-          const irr={};
-          horizons.forEach(h=>irr[h]=IRR(cashFlow(priceNow,epsMap[h],payout,peT))*100);
-          const priceF=eps10.at(-1)*peT;
-          if(tbody) tbody.insertAdjacentHTML('beforeend',`<tr><td>${sc}</td><td>${eps10.at(-1).toFixed(2)}</td><td>${priceF.toFixed(2)}</td><td>${irr[7].toFixed(2)}%</td><td>${irr[10].toFixed(2)}%</td><td>${irr[15].toFixed(2)}%</td></tr>`);
-          irrBar.push(isFinite(irr[10])?irr[10]:0);
-        });
-        const tbl=$('#tblScen'); if(tbl) tbl.style.display='table';
-
-        Plotly.newPlot('chartScenario',[{x:scenarios,y:irrBar,type:'bar',marker:{color:['#ff6961','#f0ad4e','#5cb85c']}}],{title:'IRR (10‑year horizon)',yaxis:{title:'IRR %'},margin:{t:40}});
-
-        const peRange=Array.from({length:13},(_,i)=>8+i);
-        const irrPE=peRange.map(pe=>IRR(cashFlow(priceNow,buildEPS('B',10),payout,pe))*100);
-        Plotly.newPlot('chartPE',[{x:peRange,y:irrPE,type:'scatter',mode:'lines+markers'}],{title:'IRR vs Terminal P/E (Base, 10y)',xaxis:{title:'Terminal P/E'},yaxis:{title:'IRR %'},margin:{t:40}});
-      });
-    });
-  </script>
+<script>
+const $ = id=>document.getElementById(id);
+const get = id=>+($(id)?.value||0);
+const logistic=(t,t0,k)=>1/(1+Math.exp(-k*(t-t0)));
+function epsPath(s,yrs){
+  const R0=get('rev'), g0=get('g0')/100, TAM=get('tam'), m0=get('m0')/100, mPk=get('mPk')/100, sh=get('sh');
+  const adj={P:0.6,B:1,O:1.3}[s];
+  const gPk=g0*adj, tPk=5*adj, k=0.4/adj, mShift=(mPk-m0)*adj;
+  let R=R0, arr=[];
+  for(let t=1;t<=yrs;t++){
+    const g=gPk*(1-logistic(t,tPk,k));
+    R=Math.min(R*(1+g),TAM);
+    const margin=m0+mShift*logistic(t,tPk,k);
+    arr.push((R*margin)/sh);
+  }
+  return arr;
+}
+const cashFlows=(P,eps,pay,pe)=>{
+  const cf=[-P]; eps.forEach(e=>cf.push(e*pay)); cf[cf.length-1]+=eps.at(-1)*pe; return cf;
+};
+function IRR(cf){let r=0.1;for(let i=0;i<100;i++){let f=0,df=0;cf.forEach((c,t)=>{const d=Math.pow(1+r,t);f+=c/d;if(t>0)df+=-t*c/Math.pow(1+r,t+1);});if(Math.abs(df)<1e-9)return null;const rN=r-f/df;if(!isFinite(rN))return null;if(Math.abs(rN-r)<1e-6)return rN;r=rN;}return null;}
+function simulate(){
+  const price=get('pNow'), pay=get('pay')/100, peT=get('peT');
+  const scenarios=['P','B','O'], yrs=[7,10,15];
+  const tbody=$('#tbl tbody'); tbody.innerHTML='';
+  const barData=[];
+  scenarios.forEach(s=>{
+    const eps10=epsPath(s,10);
+    const map={7:eps10.slice(0,7),10:eps10,15:[...eps10,...epsPath(s,5)]};
+    const irrVals={}; yrs.forEach(y=>{const v=IRR(cashFlows(price,map[y],pay,peT)); irrVals[y]=v? v*100 : 0; });
+    const fut=eps10.at(-1)*peT;
+    tbody.insertAdjacentHTML('beforeend',`<tr><td>${s}</td><td>${eps10.at(-1).toFixed(2)}</td><td>${fut.toFixed(2)}</td><td>${irrVals[7].toFixed(2)}%</td><td>${irrVals[10].toFixed(2)}%</td><td>${irrVals[15].toFixed(2)}%</td></tr>`);
+    barData.push(irrVals[10]);
+  });
+  $('#tbl').style.display='table';
+  Plotly.newPlot('bar',[{x:scenarios,y:barData,type:'bar'}]);
+  const peList=Array.from({length:13},(_,i)=>8+i);
+  const irrPE=peList.map(pe=>{const v=IRR(cashFlows(price,epsPath('B',10),pay,pe)); return v? v*100 : 0; });
+  Plotly.newPlot('line',[{x:peList,y:irrPE,type:'scatter',mode:'lines+markers'}]);
+}
+window.onload=()=>{$('#run').onclick=simulate;};
+</script>
 </body>
 </html>
