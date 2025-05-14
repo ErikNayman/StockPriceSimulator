@@ -130,9 +130,17 @@ function simulate(){// validate weights
  Plotly.newPlot('bar',[{x:['P','B','O'],y:scenarios.map(s=>s.w),type:'bar'}]);
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
- javascript\n// — placeholder; можно позже рисовать mini-график\nfunction drawMini(){}\n\n// вешаем слушатели на поля и на кнопку Run\ndocument.addEventListener('DOMContentLoaded', () => {\n ['g0P','gEP','g0B','gEB','g0O','gEO','m0','mPk','tMid','kG','kLog']\n .forEach(id => $(id)?.addEventListener('input', drawMini));\n $('runBtn').addEventListener('click', simulate);\n});\n
+/* ───── mini-graph (пустышка, чтобы не ломало) ───── */
+function drawMini() {}
+
+/* ───── вешаем слушатели после построения DOM ───── */
+document.addEventListener('DOMContentLoaded', () => {
+  ['g0P','gEP','g0B','gEB','g0O','gEO','m0','mPk','tMid','kG','kLog']
+    .forEach(id => $(id)?.addEventListener('input', drawMini));
+
+  $('runBtn').addEventListener('click', simulate);
 });
+
 </script>
 </body>
 </html>
