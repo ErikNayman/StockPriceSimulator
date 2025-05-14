@@ -131,8 +131,7 @@ function simulate(){// validate weights
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
- javascript\n// — маленький график YoY+Margin (если нужен)\nfunction drawMini(){ /* можно оставить пустым */ }\n\n// слушатели только на реально существующие поля\n
- ['g0P','gEP','g0B','gEB','g0O','gEO','m0','mPk','tMid','kG','kLog']\n .forEach(id => $(id)?.addEventListener('input', drawMini));\n
+ javascript\n// — placeholder; можно позже рисовать mini-график\nfunction drawMini(){}\n\n// вешаем слушатели на поля и на кнопку Run\ndocument.addEventListener('DOMContentLoaded', () => {\n ['g0P','gEP','g0B','gEB','g0O','gEO','m0','mPk','tMid','kG','kLog']\n .forEach(id => $(id)?.addEventListener('input', drawMini));\n $('runBtn').addEventListener('click', simulate);\n});\n
 });
 </script>
 </body>
