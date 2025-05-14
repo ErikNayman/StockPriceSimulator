@@ -1,104 +1,137 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DCF + XIRR Simulator</title>
-  <script src="https://cdn.plot.ly/plotly-2.20.0.min.js" defer></script>
-  <style>
-    :root{--bg:#f4f6f9;--card:#fff;--pri:#2b7cff;--b:#ddd;--mut:#555}
-    *{box-sizing:border-box}
-    body{margin:0;padding:2rem;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#222}
-    .wrap{max-width:760px;margin:auto;background:var(--card);padding:2rem 2.2rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
-    h1{font-size:1.55rem;margin-bottom:1.2rem}
-    .field{display:flex;flex-direction:column;margin-bottom:.9rem}
-    .field label{font-weight:600;margin-bottom:.25rem}
-    .field input{padding:7px;border:1px solid var(--b);border-radius:4px;font-size:.95rem}
-    .hint{font-size:.8rem;color:var(--mut);margin-top:.25rem}
-    button{display:block;width:100%;padding:11px;background:var(--pri);border:none;border-radius:6px;font-weight:700;font-size:1rem;color:#fff;cursor:pointer;margin:1.3rem 0}
-    button:hover{opacity:.93}
-    table{margin-top:1.2rem;border-collapse:collapse;width:100%}
-    th,td{border:1px solid var(--b);padding:6px;text-align:center;font-size:.85rem}
-    .plot{height:420px;width:100%;margin-top:1.4rem}
-  </style>
+<meta charset="UTF-8" />
+<title>DCF – Multi‑Scenario Valuation Demo</title>
+<script src="https://cdn.plot.ly/plotly-2.20.0.min.js" defer></script>
+<style>
+ :root{--bg:#f4f6f9;--card:#fff;--pri:#2b7cff;--b:#ddd}
+ *{box-sizing:border-box}
+ body{margin:0;padding:2rem;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#222}
+ .wrap{max-width:1100px;margin:auto;background:var(--card);padding:2rem 2.3rem;border-radius:12px;box-shadow:0 3px 14px rgba(0,0,0,.08)}
+ h1{font-size:1.35rem;margin-bottom:1.1rem}
+ .row{display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+ .field{flex:1;display:flex;flex-direction:column;min-width:140px}
+ .field label{font-weight:600;margin-bottom:.25rem}
+ .field input,.field select{padding:7px;border:1px solid var(--b);border-radius:4px;font-size:.9rem}
+ .mini{flex:0 0 240px;height:160px}
+ button{width:100%;padding:11px;border:none;border-radius:6px;font-weight:700;background:var(--pri);color:#fff;font-size:.95rem;cursor:pointer;margin:1.1rem 0}
+ table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.85rem}
+ th,td{border:1px solid var(--b);padding:6px;text-align:center}
+ tfoot td{font-weight:700}
+ .plot{width:100%;height:400px;margin-top:1.2rem}
+</style>
 </head>
 <body>
 <div class="wrap">
-  <h1>DCF &amp; XIRR — P/B/O Scenarios + PE Sensitivity</h1>
+<h1>DCF & IRR – Weighted Scenario Model</h1>
 
-  <!-- INPUTS -->
-  <div class="field"><label for="pNow">Share price, $</label><input id="pNow" type="number" value="100" step="0.1"><span class="hint">Market price today</span></div>
-  <div class="field"><label for="rev">Revenue (last FY), B$</label><input id="rev" type="number" value="50" step="0.1"></div>
-  <div class="field"><label for="g0">Initial YoY growth %, last FY</label><input id="g0" type="number" value="20" step="0.1"></div>
-  <div class="field"><label for="tam">TAM ceiling, B$</label><input id="tam" type="number" value="300" step="1"></div>
-  <div class="field"><label for="m0">Net margin %, current</label><input id="m0" type="number" value="-5" step="0.1"></div>
-  <div class="field"><label for="mPk">Peak margin %, steady‑state</label><input id="mPk" type="number" value="20" step="0.5"></div>
-  <div class="field"><label for="tMid">Margin S‑curve midpoint, year</label><input id="tMid" type="number" value="5" step="0.1"><span class="hint">Year when margin≈(m0+mPk)/2</span></div>
-  <div class="field"><label for="kLog">Margin S‑curve steepness k</label><input id="kLog" type="number" value="0.5" step="0.05"><span class="hint">Higher k → sharper transition</span></div>
-  <div class="field"><label for="pay">Payout % (div/NI)</label><input id="pay" type="number" value="40" step="1"></div>
-  <div class="field"><label for="sh">Shares out, B</label><input id="sh" type="number" value="1" step="0.01"></div>
-  <div class="field"><label for="peT">Terminal P/E</label><input id="peT" type="number" value="12" step="1"></div>
+<!-- ===== CORE ===== -->
+<div class="row">
+ <div class="field"><label>Share price, $</label><input id="pNow" type="number" value="100" step="0.1"></div>
+ <div class="field"><label>Required return / WACC %</label><input id="wacc" type="number" value="10" step="0.1"></div>
+ <div class="field"><label>Tax rate %</label><input id="tax" type="number" value="20" step="0.1"></div>
+</div>
+<div class="row">
+ <div class="field"><label>Debt / Equity</label><input id="de" type="number" value="0.3" step="0.01"></div>
+ <div class="field"><label>Cost of debt %</label><input id="rd" type="number" value="4" step="0.1"></div>
+</div>
 
-  <button id="runBtn">Run simulation</button>
+<!-- ===== SCENARIOS ===== -->
+<table style="margin-bottom:1rem"><thead><tr><th></th><th>g0 %</th><th>gEnd %</th><th>Buy‑back % NI</th><th>Weight</th></tr></thead>
+<tbody>
+<tr><td>P (optimistic)</td><td><input id="g0P" type="number" value="25" step="0.1"></td><td><input id="gEP" type="number" value="5" step="0.1"></td><td><input id="bbP" type="number" value="2" step="0.1"></td><td><input id="wP" type="number" value="0.25" step="0.01"></td></tr>
+<tr><td>B (base)</td><td><input id="g0B" type="number" value="20" step="0.1"></td><td><input id="gEB" type="number" value="3" step="0.1"></td><td><input id="bbB" type="number" value="1" step="0.1"></td><td><input id="wB" type="number" value="0.5" step="0.01"></td></tr>
+<tr><td>O (pess.)</td><td><input id="g0O" type="number" value="12" step="0.1"></td><td><input id="gEO" type="number" value="1" step="0.1"></td><td><input id="bbO" type="number" value="0.5" step="0.1"></td><td><input id="wO" type="number" value="0.25" step="0.01"></td></tr>
+</tbody></table>
 
-  <!-- OUTPUTS -->
-  <table id="tbl" style="display:none"><thead><tr><th>Scenario</th><th>EPS<sub>n</sub></th><th>Future Price</th><th>XIRR 7y</th><th>XIRR 10y</th><th>XIRR 15y</th></tr></thead><tbody></tbody></table>
-  <div id="bar" class="plot"></div>
-  <div id="line" class="plot"></div>
+<!-- ===== LOGISTIC SHAPE (common) ===== -->
+<div class="row"><div class="field"><label>Growth mid‑point year</label><input id="gMid" type="number" value="5" step="0.1"></div><div class="field"><label>Growth steepness k</label><input id="kG" type="number" value="0.4" step="0.05"></div></div>
+
+<!-- ===== MARGIN CURVE (common) ===== -->
+<div class="row">
+ <div class="field"><label>Initial margin %</label><input id="m0" type="number" value="-5" step="0.1"></div>
+ <div class="field"><label>Peak margin %</label><input id="mPk" type="number" value="20" step="0.5"></div>
+ <div class="field"><label>Margin mid‑point yr</label><input id="tMid" type="number" value="5" step="0.1"></div>
+ <div class="field"><label>Margin steepness k</label><input id="kLog" type="number" value="0.5" step="0.05"></div>
+</div>
+
+<!-- ===== CAPEX & WC ===== -->
+<div class="row"><div class="field"><label>CAPEX % of revenue</label><input id="capex" type="number" value="6" step="0.1"></div>
+ <div class="field"><label>ΔWC % of ΔRevenue</label><input id="wc" type="number" value="10" step="0.1"></div></div>
+
+<!-- ===== TERMINAL ===== -->
+<div class="row">
+ <div class="field"><label>Terminal method</label><select id="tMethod"><option value="pe">P/E Multiple</option><option value="gordon">Gordon growth</option></select></div>
+ <div class="field"><label>a (PE base)</label><input id="aPE" type="number" value="8" step="0.1"></div>
+ <div class="field"><label>b (per gEnd)</label><input id="bPE" type="number" value="1.2" step="0.1"></div>
+ <div class="field"><label>c (per Peak margin)</label><input id="cPE" type="number" value="0.2" step="0.01"></div>
+ <div class="field"><label>g∞ % (Gordon)</label><input id="gInf" type="number" value="2" step="0.1"></div>
+</div>
+
+<!-- ===== OTHER ===== -->
+<div class="row"><div class="field"><label>Payout % (div/NI)</label><input id="pay" type="number" value="20" step="0.1"></div>
+ <div class="field"><label>Revenue (last FY), B$</label><input id="rev" type="number" value="50" step="0.1"></div>
+ <div class="field"><label>Shares out, B</label><input id="sh" type="number" value="1" step="0.01"></div>
+</div>
+
+<button id="runBtn">Run simulation</button>
+
+<table id="tbl" style="display:none"><thead><tr><th>Scenario</th><th>Weight</th><th>Fair&nbsp;Value</th><th>Upside&nbsp;%</th><th>IRR 10y</th></tr></thead><tbody></tbody><tfoot><tr><th colspan="2">Weighted</th><td id="fvW"></td><td id="upW"></td><td></td></tr></tfoot></table>
+<div id="bar" class="plot"></div>
 </div>
 
 <script>
-// === util ===
-const $ = id=>document.getElementById(id);
-const val = id=>+($(id)?.value||0);
-const logistic = (t,t0,k)=>1/(1+Math.exp(-k*(t-t0)));
+const $=id=>document.getElementById(id), val=id=>+($(id)?.value||0);
+const lg=(t,t0,k,min,max)=>min+(max-min)/(1+Math.exp(-k*(t-t0)));
+function growth(n,g0,gEnd){const kSign=g0>gEnd?-1:1;return Array.from({length:n},(_,i)=>lg(i+1,val('gMid'),val('kG')*kSign,gEnd,g0));}
+const margin=n=>Array.from({length:n},(_,i)=>lg(i+1,val('tMid'),val('kLog')*(val('m0')>val('mPk')?-1:1),val('mPk')/100,val('m0')/100));
+function sharesSeries(bb,n){const out=[val('sh')];for(let i=0;i<n;i++)out.push(out.at(-1)*(1-bb/100));return out.slice(1);} // yearly shrinking
+function IRR(cf){let r=0.1;for(let i=0;i<100;i++){let f=0,df=0;cf.forEach((c,t)=>{const d=(1+r)**t;f+=c/d;if(t>0)df+=-t*c/(d*(1+r))});if(Math.abs(df)<1e-8)break;const r2=r-f/df;if(!isFinite(r2))return null;if(Math.abs(r2-r)<1e-6)return r2;r=r2;}return r;}
+function PV(arr,rate,start){return arr.reduce((s,c,i)=>s+c/(1+rate)**(i+start),0);} // start=1 (year1)
 
-// revenue S‑curve (logistic to TAM)
-function revenuePath(years){
-  const R0=val('rev'), TAM=val('tam'), g0=val('g0')/100;
-  if(R0<=0||TAM<=R0){return Array(years).fill(R0);} // fallback
-  const lambda = g0 * TAM / (TAM - R0);
-  const A = (TAM - R0)/R0;
-  const arr=[];
-  for(let t=1;t<=years;t++) arr.push( TAM / (1 + A*Math.exp(-lambda*t)) );
-  return arr;
-}
-// margin logistic curve with user k and tMid
-function marginPath(years){
-  const m0=val('m0')/100, mPk=val('mPk')/100, k=val('kLog'), tMid=val('tMid');
-  const arr=[];
-  for(let t=1;t<=years;t++) arr.push( m0 + (mPk-m0)/(1+Math.exp(-k*(t-tMid))) );
-  return arr;
-}
-function epsSeries(sc,yrs){
-  const rev=revenuePath(yrs+5), margin=marginPath(yrs+5); const adj={P:0.6,B:1,O:1.3}[sc];
-  const sh=val('sh'); const eps=[];
-  for(let i=0;i<yrs;i++) eps.push( rev[i]*adj*margin[i]/sh );
-  return eps;
-}
-const cash=(P,eps,pay,pe)=>{const cf=[-P];eps.forEach(e=>cf.push(e*pay));cf[cf.length-1]+=eps.at(-1)*pe;return cf};
-function IRR(cf){let r=0.1;for(let i=0;i<100;i++){let f=0,df=0;cf.forEach((c,t)=>{const d=(1+r)**t;f+=c/d;if(t>0)df+=-t*c/(d*(1+r));});if(Math.abs(df)<1e-8) return null;const rN=r-f/df;if(!isFinite(rN))return null;if(Math.abs(rN-r)<1e-6) return rN;r=rN;}return null;}
-function simulate(){
-  const price=val('pNow'); if(!price){alert('Enter share price');return;}
-  const pay=val('pay')/100, peT=val('peT');
-  const tbody=document.querySelector('#tbl tbody'); tbody.innerHTML='';
-  const SC=['P','B','O'], H=[7,10,15], bar=[];
-  SC.forEach(s=>{
-    const eps10=epsSeries(s,10);
-    const epsMap={7:eps10.slice(0,7),10:eps10,15:[...eps10,...epsSeries(s,5)]};
-    const irr={}; H.forEach(h=>{const r=IRR(cash(price,epsMap[h],pay,peT)); irr[h]=r? (r*100).toFixed(2):'n/a';});
-    tbody.insertAdjacentHTML('beforeend',`<tr><td>${s}</td><td>${eps10.at(-1).toFixed(2)}</td><td>${(eps10.at(-1)*peT).toFixed(2)}</td><td>${irr[7]}</td><td>${irr[10]}</td><td>${irr[15]}</td></tr>`);
-    bar.push(isNaN(+irr[10])?0:+irr[10]);
-  });
-  document.getElementById('tbl').style.display='table';
-  Plotly.newPlot('bar',[{x:SC,y:bar,type:'bar'}]);
-
-  const peArr=Array.from({length:13},(_,i)=>8+i);
-  const irrPE=peArr.map(pe=>{const r=IRR(cash(price,epsSeries('B',10),pay,pe));return r?r*100:0;});
-  Plotly.newPlot('line',[{x:peArr,y:irrPE,type:'scatter',mode:'lines+markers'}]);
+function simulate(){// validate weights
+ const sumW=val('wP')+val('wB')+val('wO');if(Math.abs(sumW-1)>1e-3){alert('Scenario weights must sum to 1');return;}
+ const price=val('pNow'),wacc=val('wacc')/100;if(!price||!wacc){alert('Price & WACC');return;}
+ const scenarios=[{id:'P',g0:val('g0P'),gEnd:val('gEP'),bb:val('bbP'),w:val('wP'),b:0.6},{id:'B',g0:val('g0B'),gEnd:val('gEB'),bb:val('bbB'),w:val('wB'),b:1},{id:'O',g0:val('g0O'),gEnd:val('gEO'),bb:val('bbO'),w:val('wO'),b:1.3}];
+ const tbody=$('#tbl tbody');tbody.innerHTML='';let fvWeighted=0;
+ scenarios.forEach(sc=>{
+   const g=growth(15,sc.g0,sc.gEnd);
+   const rev=[val('rev')];g.forEach(x=>rev.push(rev.at(-1)*(1+x/100)));
+   const mar=margin(15);
+   const shares=sharesSeries(sc.bb,15);
+   // NI & FCFE (div+payout)
+   const ni=rev.slice(1).map((r,i)=>r*mar[i]);
+   const fcfe=ni.map((n,i)=>n*((val('pay')+sc.bb)/100));
+   // CAPEX & ΔWC adjustments
+   const cap=rev.slice(1).map(r=>r*val('capex')/100);
+   const dwc=rev.slice(1).map((r,i)=>i===0?0:(r-rev[i])*val('wc')/100);
+   const fcfAdj=fcfe.map((c,i)=>c-cap[i]-dwc[i]);
+   const eps=ni.map((n,i)=>n/shares[i]);
+   // terminal
+   let tv;const method=$('#tMethod').value;
+   if(method==='pe'){
+      const pe=val('aPE')+val('bPE')*sc.gEnd+val('cPE')*val('mPk');
+      tv=eps.at(-1)*pe;
+   }else{
+      const gInf=val('gInf')/100;if(wacc<=gInf){alert('WACC must exceed g∞');return;}
+      tv=fcfAdj.at(-1)*(1+gInf)/(wacc-gInf);
+   }
+   const pv=PV(fcfAdj,wacc,1)+tv/(1+wacc)**fcfAdj.length;
+   fvWeighted+=pv*sc.w;
+   const irr10=IRR([-price,...fcfAdj.slice(0,10-1),fcfAdj[9]+tv]);
+   tbody.insertAdjacentHTML('beforeend',`<tr><td>${sc.id}</td><td>${sc.w.toFixed(2)}</td><td>${pv.toFixed(2)}</td><td>${((pv/price-1)*100).toFixed(1)}</td><td>${(irr10*100).toFixed(2)}</td></tr>`);
+ });
+ $('#fvW').textContent=fvWeighted.toFixed(2);
+ $('#upW').textContent=((fvWeighted/price-1)*100).toFixed(1);
+ $('#tbl').style.display='table';
+ Plotly.newPlot('bar',[{x:['P','B','O'],y:scenarios.map(s=>s.w),type:'bar'}]);
 }
 
-document.addEventListener('DOMContentLoaded',()=>{$('runBtn')?.addEventListener('click',simulate);});
+document.addEventListener('DOMContentLoaded',()=>{
+ drawMini();['g0','gEnd','g0P','gEP','g0B','gEB','g0O','gEO','m0','mPk','tMid','kG','kLog'].forEach(id=>$(id)?.addEventListener('input',drawMini));
+ $('#runBtn').addEventListener('click',simulate);
+});
 </script>
 </body>
 </html>
