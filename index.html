@@ -94,7 +94,7 @@ function simulate(){// validate weights
  const sumW=val('wP')+val('wB')+val('wO');if(Math.abs(sumW-1)>1e-3){alert('Scenario weights must sum to 1');return;}
  const price=val('pNow'),wacc=val('wacc')/100;if(!price||!wacc){alert('Price & WACC');return;}
  const scenarios=[{id:'P',g0:val('g0P'),gEnd:val('gEP'),bb:val('bbP'),w:val('wP'),b:0.6},{id:'B',g0:val('g0B'),gEnd:val('gEB'),bb:val('bbB'),w:val('wB'),b:1},{id:'O',g0:val('g0O'),gEnd:val('gEO'),bb:val('bbO'),w:val('wO'),b:1.3}];
- const tbody=$('#tbl tbody');tbody.innerHTML='';let fvWeighted=0;
+ const tbody = document.querySelector('#tbl tbody');tbody.innerHTML='';let fvWeighted=0;
  scenarios.forEach(sc=>{
    const g=growth(15,sc.g0,sc.gEnd);
    const rev=[val('rev')];g.forEach(x=>rev.push(rev.at(-1)*(1+x/100)));
@@ -109,7 +109,7 @@ function simulate(){// validate weights
    const fcfAdj=fcfe.map((c,i)=>c-cap[i]-dwc[i]);
    const eps=ni.map((n,i)=>n/shares[i]);
    // terminal
-   let tv;const method=$('#tMethod').value;
+   let tv;const method=$('tMethod').value;
    if(method==='pe'){
       const pe=val('aPE')+val('bPE')*sc.gEnd+val('cPE')*val('mPk');
       tv=eps.at(-1)*pe;
@@ -122,9 +122,9 @@ function simulate(){// validate weights
    const irr10=IRR([-price,...fcfAdj.slice(0,10-1),fcfAdj[9]+tv]);
    tbody.insertAdjacentHTML('beforeend',`<tr><td>${sc.id}</td><td>${sc.w.toFixed(2)}</td><td>${pv.toFixed(2)}</td><td>${((pv/price-1)*100).toFixed(1)}</td><td>${(irr10*100).toFixed(2)}</td></tr>`);
  });
- $('#fvW').textContent=fvWeighted.toFixed(2);
- $('#upW').textContent=((fvWeighted/price-1)*100).toFixed(1);
- $('#tbl').style.display='table';
+ $('fvW').textContent=fvWeighted.toFixed(2);
+ $('upW').textContent=((fvWeighted/price-1)*100).toFixed(1);
+ $('tbl').style.display='table';
  Plotly.newPlot('bar',[{x:['P','B','O'],y:scenarios.map(s=>s.w),type:'bar'}]);
 }
 
