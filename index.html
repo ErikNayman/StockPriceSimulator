@@ -94,7 +94,9 @@ function simulate(){// validate weights
  const sumW=val('wP')+val('wB')+val('wO');if(Math.abs(sumW-1)>1e-3){alert('Scenario weights must sum to 1');return;}
  const price=val('pNow'),wacc=val('wacc')/100;if(!price||!wacc){alert('Price & WACC');return;}
  const scenarios=[{id:'P',g0:val('g0P'),gEnd:val('gEP'),bb:val('bbP'),w:val('wP'),b:0.6},{id:'B',g0:val('g0B'),gEnd:val('gEB'),bb:val('bbB'),w:val('wB'),b:1},{id:'O',g0:val('g0O'),gEnd:val('gEO'),bb:val('bbO'),w:val('wO'),b:1.3}];
- const tbody = document.querySelector('tbl');tbody.innerHTML='';let fvWeighted=0;
+ const tbody = $('tbl').querySelector('tbody');
+ tbody.innerHTML='';
+ let fvWeighted=0;
  scenarios.forEach(sc=>{
    const g=growth(15,sc.g0,sc.gEnd);
    const rev=[val('rev')];g.forEach(x=>rev.push(rev.at(-1)*(1+x/100)));
